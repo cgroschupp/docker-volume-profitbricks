@@ -150,12 +150,6 @@ func (d *Driver) Create(r volume.Request) volume.Response {
 		return volume.Response{Err: err.Error()}
 	}
 
-	result, err := d.utilities.getNewLsblk()
-	if err != nil {
-		log.Error(err.Error())
-		return volume.Response{Err: err.Error()}
-	}
-
 	if isNewVolume {
 		//Check volume name is unique in the datacenter
 		volumesresp := profitbricks.ListVolumes(d.datacenterID)
@@ -274,7 +268,10 @@ func (d *Driver) Create(r volume.Request) volume.Response {
 		return volume.Response{Err: err.Error()}
 	}
 
-	d.utilities.WriteLsblk(metadataFilePath, result)
+	err = d.utilities.WriteFile(metadataFilePath, metadataFileMode, d.volumes[r.Name])
+	if err != nil {
+		return volume.Response{Err: err.Error()}
+	}
 
 	detachResp := profitbricks.DetachVolume(d.datacenterID, d.serverID, volumeID)
 	if detachResp.StatusCode > 299 {
@@ -301,8 +298,11 @@ func (d *Driver) Mount(r volume.MountRequest) volume.Response {
 	defer d.Unlock()
 	log.Infof("Mounting Volume: %s", r.Name)
 
-	vol := d.volumes[r.Name]
-	log.Info(vol.DeviceName)
+
+	vol, ok := d.volumes[r.Name]
+	if !ok {
+		return volume.Response{Err: fmt.Sprintf("volume %s not found", r.Name)}
+	}
 
 	attachResp := profitbricks.AttachVolume(d.datacenterID, d.serverID, vol.VolumeID)
 	if attachResp.StatusCode > 299 {
@@ -369,7 +369,7 @@ func (d *Driver) List(r volume.Request) volume.Response {
 	d.Lock()
 	defer d.Unlock()
 	volumes := []*volume.Volume{}
-	log.Info("Getting a Volume")
+	log.Info("List Volumes")
 
 	for name, state := range d.volumes {
 		volumes = append(volumes, &volume.Volume{
@@ -382,13 +382,13 @@ func (d *Driver) List(r volume.Request) volume.Response {
 
 //Get is showing a volume meta info.
 func (d *Driver) Get(r volume.Request) volume.Response {
-	log.Info("Getting a Volume")
+	log.Infof("Getting a Volume %s", r.Name)
 
 	if d.volumes[r.Name] == nil {
 		return volume.Response{}
 	}
 	vol := &volume.Volume{
-		Name:       d.volumes[r.Name].DeviceName,
+		Name:       r.Name,
 		Mountpoint: d.volumes[r.Name].MountPoint,
 	}
 
@@ -406,7 +406,7 @@ func (d *Driver) Remove(r volume.Request) volume.Response {
 	for k, v := range d.volumes {
 		log.Infof("Key %s", k)
 		log.Infof("v.MountPoint == r.Name ", v.MountPoint == r.Name)
-		if v.DeviceName == r.Name {
+		if k == r.Name {
 			key = k
 			vol = v
 			break

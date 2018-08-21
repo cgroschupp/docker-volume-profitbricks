@@ -108,15 +108,14 @@ func (m Utilities) GetServerID() (string, error) {
 	return strings.TrimSpace(toReturn), err
 }
 
-//WriteLsblk is writing to a metadata file.
-func (m Utilities) WriteLsblk(metadataPath string, result Result) error {
-	jsn, err := json.MarshalIndent(result, "\t", "\t")
+func (m Utilities) WriteFile(metadataPath string, metadataFileMode os.FileMode, volume *volumeState) error {
+	jsn, err := json.MarshalIndent(volume, "", "\t")
+
 	if err != nil {
 		return err
 	}
-	ioutil.WriteFile(metadataPath, jsn, 0644)
 
-	return err
+	return ioutil.WriteFile(metadataPath, jsn, metadataFileMode)
 }
 
 //getNewLsbkl is getting a lsbkl value.
